@@ -26,6 +26,11 @@ data Token a
     | Atom (Atom a)
     deriving (Eq, Show)
 
+isAtom :: Token a -> Bool
+isAtom = \case
+    Atom _ -> True
+    _      -> False
+
 unsafeAtom :: Token a -> Atom a
 unsafeAtom = \case
     Plus a -> a
@@ -105,20 +110,26 @@ tokensIntersect [] (Atom _ : _) = False
 tokensIntersect (Atom _ : _) [] = False
 tokensIntersect (Atom x : xs) (Atom y : ys) =
     atomsIntersect x y && tokensIntersect xs ys
-tokensIntersect (Plus _ : _) [] = False
-tokensIntersect (Plus x : xs) (t : ts) =
-    atomsIntersect x (unsafeAtom t) && tokensIntersect (Star x : xs) ts
-tokensIntersect (Star _ : xs) [] =
-    tokensIntersect xs []
-tokensIntersect [Star x] (t : ts) =
-    atomsIntersect x (unsafeAtom t) && tokensIntersect [Star x] ts
-tokensIntersect (Star x : y : ys) (t : ts) =
+tokensIntersect (Star x : xs) ys = intersectStar x xs ys
+tokensIntersect (Plus x : xs) ys = intersectPlus x xs ys
+tokensIntersect xs (Star y : ys) = intersectStar y ys xs
+tokensIntersect xs (Plus y : ys) = intersectPlus y ys xs
+
+intersectPlus :: Ord a => Atom a -> [Token a] -> [Token a] -> Bool
+intersectPlus _ _  []       = False
+intersectPlus x xs (t : ts) =
+    atomsIntersect x (unsafeAtom t) &&
+    (tokensIntersect (Star x : xs) ts ||
+        not (isAtom t) && tokensIntersect xs (t : ts))
+
+intersectStar :: Ord a => Atom a -> [Token a] -> [Token a] -> Bool
+intersectStar _ xs [] = tokensIntersect xs []
+intersectStar x [] (t : ts) =
+    atomsIntersect x (unsafeAtom t) && intersectStar x [] ts
+intersectStar x (y : ys) (t : ts) =
     (atomsIntersect (unsafeAtom y) (unsafeAtom t) &&
         tokensIntersect (y : ys) (t : ts)) ||
-    (atomsIntersect x (unsafeAtom t) && tokensIntersect (Star x : y : ys) ts)
-
-tokensIntersect xs ys@(Star _ : _) = tokensIntersect ys xs
-tokensIntersect xs ys@(Plus _ : _) = tokensIntersect ys xs
+    (atomsIntersect x (unsafeAtom t) && intersectStar x (y : ys) ts)
 
 -- | Checks if there is an intersection between the two patterns.
 intersects :: Ord a => Pattern a -> Pattern a -> Bool
